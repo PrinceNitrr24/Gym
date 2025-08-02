@@ -18,144 +18,214 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Search, MoreHorizontal, Edit, Trash2, Clock, Users, Filter, Activity } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Activity, Plus, Search, MoreHorizontal, Edit, Trash2, Clock, Users, Filter, Bell, Send } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 
-// Mock data for activities
+// Mock data for activities (limited to 5, sorted by latest)
 const mockActivities = [
   {
     id: 1,
-    name: "Morning Yoga",
-    description: "Start your day with relaxing yoga session",
-    duration: 60,
-    capacity: 20,
-    currentParticipants: 15,
-    isActive: true,
-    category: "Yoga",
+    name: "HIIT Training",
+    description: "High-intensity interval training for maximum results",
+    duration_minutes: 45,
+    capacity: 15,
+    current_participants: 12,
+    is_active: true,
+    timing: "10:00 AM - 12:00 PM",
+    weekdays: ["Monday", "Wednesday", "Friday"],
+    created_at: "2024-02-01T10:00:00Z",
+    notification_sent: true,
+    responses: [
+      { member: "John Doe", status: "confirmed" },
+      { member: "Sarah Wilson", status: "maybe" },
+      { member: "Mike Johnson", status: "confirmed" },
+    ],
   },
   {
     id: 2,
-    name: "HIIT Training",
-    description: "High-intensity interval training for maximum results",
-    duration: 45,
-    capacity: 15,
-    currentParticipants: 12,
-    isActive: true,
-    category: "Cardio",
+    name: "Morning Yoga",
+    description: "Start your day with peaceful yoga sessions",
+    duration_minutes: 60,
+    capacity: 20,
+    current_participants: 18,
+    is_active: true,
+    timing: "08:00 AM - 09:00 AM",
+    weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    created_at: "2024-01-30T08:00:00Z",
+    notification_sent: false,
+    responses: [
+      { member: "Emma Davis", status: "confirmed" },
+      { member: "Alex Brown", status: "confirmed" },
+    ],
   },
   {
     id: 3,
     name: "Strength Training",
     description: "Build muscle and increase strength",
-    duration: 90,
+    duration_minutes: 90,
     capacity: 10,
-    currentParticipants: 8,
-    isActive: true,
-    category: "Strength",
+    current_participants: 8,
+    is_active: true,
+    timing: "02:00 PM - 03:30 PM",
+    weekdays: ["Tuesday", "Thursday", "Saturday"],
+    created_at: "2024-01-28T14:00:00Z",
+    notification_sent: true,
+    responses: [],
   },
   {
     id: 4,
     name: "Pilates",
     description: "Core strengthening and flexibility",
-    duration: 50,
+    duration_minutes: 50,
     capacity: 12,
-    currentParticipants: 10,
-    isActive: true,
-    category: "Pilates",
+    current_participants: 10,
+    is_active: true,
+    timing: "04:00 PM - 04:50 PM",
+    weekdays: ["Monday", "Wednesday", "Friday"],
+    created_at: "2024-01-25T16:00:00Z",
+    notification_sent: false,
+    responses: [],
   },
   {
     id: 5,
     name: "Boxing Class",
     description: "Learn boxing techniques and get fit",
-    duration: 60,
-    capacity: 16,
-    currentParticipants: 5,
-    isActive: false,
-    category: "Boxing",
-  },
-  {
-    id: 6,
-    name: "Swimming Lessons",
-    description: "Learn to swim or improve your technique",
-    duration: 45,
+    duration_minutes: 60,
     capacity: 8,
-    currentParticipants: 6,
-    isActive: true,
-    category: "Swimming",
+    current_participants: 5,
+    is_active: false,
+    timing: "06:00 PM - 07:00 PM",
+    weekdays: ["Tuesday", "Thursday"],
+    created_at: "2024-01-20T18:00:00Z",
+    notification_sent: true,
+    responses: [],
   },
 ]
 
+const weekdayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
 export default function ActivitiesPage() {
-  const [activities, setActivities] = useState(mockActivities)
+  const [activities, setActivities] = useState(
+    mockActivities.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+  )
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
+  const [selectedActivity, setSelectedActivity] = useState<any>(null)
+  const [notificationType, setNotificationType] = useState<"all" | "near_full">("all")
   const [newActivity, setNewActivity] = useState({
     name: "",
     description: "",
-    duration: "",
+    duration_minutes: "",
     capacity: "",
-    category: "",
+    timing: "",
+    weekdays: [] as string[],
   })
 
   const filteredActivities = activities.filter((activity) => {
     const matchesSearch =
       activity.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      activity.category.toLowerCase().includes(searchTerm.toLowerCase())
+      activity.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus =
       statusFilter === "all" ||
-      (statusFilter === "active" && activity.isActive) ||
-      (statusFilter === "inactive" && !activity.isActive)
+      (statusFilter === "active" && activity.is_active) ||
+      (statusFilter === "inactive" && !activity.is_active)
     return matchesSearch && matchesStatus
   })
 
-  const getCategoryColor = (category: string) => {
-    const colors = {
-      Yoga: "bg-purple-100 text-purple-800",
-      Cardio: "bg-red-100 text-red-800",
-      Strength: "bg-blue-100 text-blue-800",
-      Pilates: "bg-pink-100 text-pink-800",
-      Boxing: "bg-orange-100 text-orange-800",
-      Swimming: "bg-cyan-100 text-cyan-800",
+  const handleWeekdayChange = (weekday: string, checked: boolean) => {
+    if (checked) {
+      setNewActivity({
+        ...newActivity,
+        weekdays: [...newActivity.weekdays, weekday],
+      })
+    } else {
+      setNewActivity({
+        ...newActivity,
+        weekdays: newActivity.weekdays.filter((day) => day !== weekday),
+      })
     }
-    return colors[category as keyof typeof colors] || "bg-gray-100 text-gray-800"
-  }
-
-  const getCapacityColor = (current: number, total: number) => {
-    const percentage = (current / total) * 100
-    if (percentage >= 90) return "text-red-600"
-    if (percentage >= 70) return "text-yellow-600"
-    return "text-green-600"
   }
 
   const handleAddActivity = () => {
+    if (activities.length >= 5) {
+      toast.error("Maximum 5 activities allowed!")
+      return
+    }
+
     const activity = {
       id: activities.length + 1,
       ...newActivity,
-      duration: Number.parseInt(newActivity.duration),
+      duration_minutes: Number.parseInt(newActivity.duration_minutes),
       capacity: Number.parseInt(newActivity.capacity),
-      currentParticipants: 0,
-      isActive: true,
+      current_participants: 0,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      notification_sent: false,
+      responses: [],
     }
-    setActivities([...activities, activity])
+
+    // Add to beginning (latest first)
+    setActivities([activity, ...activities])
     setNewActivity({
       name: "",
       description: "",
-      duration: "",
+      duration_minutes: "",
       capacity: "",
-      category: "",
+      timing: "",
+      weekdays: [],
     })
     setIsAddDialogOpen(false)
+    toast.success("Activity added successfully!")
   }
 
   const handleDeleteActivity = (id: number) => {
     setActivities(activities.filter((activity) => activity.id !== id))
+    toast.success("Activity deleted successfully!")
   }
 
-  const toggleActivityStatus = (id: number) => {
-    setActivities(
-      activities.map((activity) => (activity.id === id ? { ...activity, isActive: !activity.isActive } : activity)),
-    )
+  const handleSendNotification = async () => {
+    if (!selectedActivity) return
+
+    const recipients =
+      notificationType === "all"
+        ? "all members"
+        : `members for activities ${Math.round((selectedActivity.current_participants / selectedActivity.capacity) * 100)}% full`
+
+    try {
+      const response = await fetch("/api/notifications/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "activity_notification",
+          activity_id: selectedActivity.id,
+          notification_type: notificationType,
+          title: `${selectedActivity.name} - Class Update`,
+          message: `Join us for ${selectedActivity.name} on ${selectedActivity.weekdays.join(", ")} at ${selectedActivity.timing}`,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.data) {
+        // Update notification sent status
+        setActivities(
+          activities.map((activity) =>
+            activity.id === selectedActivity.id ? { ...activity, notification_sent: true } : activity,
+          ),
+        )
+
+        toast.success(`Notifications sent to ${recipients}! 📧`)
+        setIsNotificationDialogOpen(false)
+        setSelectedActivity(null)
+      }
+    } catch (error) {
+      toast.error("Failed to send notifications")
+    }
   }
 
   const containerVariants = {
@@ -195,21 +265,21 @@ export default function ActivitiesPage() {
       >
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Activities</h2>
-          <p className="text-muted-foreground">Manage gym activities, classes, and schedules</p>
+          <p className="text-muted-foreground">Manage gym activities and classes (Max 5 activities)</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
+              <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={activities.length >= 5}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Activity
+                Add Activity {activities.length >= 5 && "(Max Reached)"}
               </Button>
             </motion.div>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Activity</DialogTitle>
-              <DialogDescription>Create a new activity or class for your gym members.</DialogDescription>
+              <DialogDescription>Create a new activity with timing and weekday schedule.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
@@ -241,8 +311,8 @@ export default function ActivitiesPage() {
                 <Input
                   id="duration"
                   type="number"
-                  value={newActivity.duration}
-                  onChange={(e) => setNewActivity({ ...newActivity, duration: e.target.value })}
+                  value={newActivity.duration_minutes}
+                  onChange={(e) => setNewActivity({ ...newActivity, duration_minutes: e.target.value })}
                   className="col-span-3"
                 />
               </div>
@@ -259,31 +329,44 @@ export default function ActivitiesPage() {
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="category" className="text-right">
-                  Category
+                <Label htmlFor="timing" className="text-right">
+                  Timing
                 </Label>
-                <Select onValueChange={(value) => setNewActivity({ ...newActivity, category: value })}>
-                  <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Yoga">Yoga</SelectItem>
-                    <SelectItem value="Cardio">Cardio</SelectItem>
-                    <SelectItem value="Strength">Strength</SelectItem>
-                    <SelectItem value="Pilates">Pilates</SelectItem>
-                    <SelectItem value="Boxing">Boxing</SelectItem>
-                    <SelectItem value="Swimming">Swimming</SelectItem>
-                    <SelectItem value="Dance">Dance</SelectItem>
-                    <SelectItem value="Martial Arts">Martial Arts</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Input
+                  id="timing"
+                  value={newActivity.timing}
+                  onChange={(e) => setNewActivity({ ...newActivity, timing: e.target.value })}
+                  placeholder="e.g., 10:00 AM - 12:00 PM"
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-start gap-4">
+                <Label className="text-right mt-2">Weekdays</Label>
+                <div className="col-span-3 space-y-2">
+                  {weekdayOptions.map((weekday) => (
+                    <div key={weekday} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={weekday}
+                        checked={newActivity.weekdays.includes(weekday)}
+                        onCheckedChange={(checked) => handleWeekdayChange(weekday, checked as boolean)}
+                      />
+                      <Label htmlFor={weekday} className="text-sm">
+                        {weekday}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddActivity} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button
+                onClick={handleAddActivity}
+                className="bg-emerald-600 hover:bg-emerald-700"
+                disabled={!newActivity.name || !newActivity.timing || newActivity.weekdays.length === 0}
+              >
                 Add Activity
               </Button>
             </div>
@@ -299,24 +382,29 @@ export default function ActivitiesPage() {
         animate="visible"
       >
         {[
-          { title: "Total Activities", value: activities.length, icon: Activity, color: "text-blue-600" },
+          {
+            title: "Total Activities",
+            value: `${activities.length}/5`,
+            icon: Activity,
+            color: "text-blue-600",
+          },
           {
             title: "Active Activities",
-            value: activities.filter((a) => a.isActive).length,
+            value: activities.filter((a) => a.is_active).length,
             icon: Activity,
             color: "text-green-600",
           },
           {
             title: "Total Participants",
-            value: activities.reduce((sum, a) => sum + a.currentParticipants, 0),
+            value: activities.reduce((sum, a) => sum + a.current_participants, 0),
             icon: Users,
             color: "text-purple-600",
           },
           {
-            title: "Average Duration",
-            value: `${Math.round(activities.reduce((sum, a) => sum + a.duration, 0) / activities.length)}min`,
-            icon: Clock,
-            color: "text-orange-600",
+            title: "Avg. Capacity",
+            value: `${Math.round(activities.reduce((sum, a) => sum + (a.current_participants / a.capacity) * 100, 0) / activities.length || 0)}%`,
+            icon: Users,
+            color: "text-emerald-600",
           },
         ].map((stat, index) => (
           <motion.div key={stat.title} variants={itemVariants}>
@@ -377,18 +465,18 @@ export default function ActivitiesPage() {
       >
         <Card>
           <CardHeader>
-            <CardTitle>Activities List</CardTitle>
-            <CardDescription>Manage all gym activities, classes, and their schedules.</CardDescription>
+            <CardTitle>Activities List (Sorted by Latest)</CardTitle>
+            <CardDescription>Manage all activities with automatic notifications and member responses.</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Activity</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Duration</TableHead>
+                  <TableHead>Schedule</TableHead>
                   <TableHead>Capacity</TableHead>
-                  <TableHead>Participants</TableHead>
+                  <TableHead>Weekdays</TableHead>
+                  <TableHead>Notifications</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -406,36 +494,86 @@ export default function ActivitiesPage() {
                       <div>
                         <div className="font-medium">{activity.name}</div>
                         <div className="text-sm text-muted-foreground">{activity.description}</div>
+                        <div className="text-xs text-muted-foreground flex items-center mt-1">
+                          <Clock className="mr-1 h-3 w-3" />
+                          {activity.duration_minutes} minutes
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge className={getCategoryColor(activity.category)}>{activity.category}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center">
+                      <div className="flex items-center text-sm">
                         <Clock className="mr-1 h-4 w-4 text-muted-foreground" />
-                        {activity.duration} min
+                        {activity.timing}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center">
-                        <Users className="mr-1 h-4 w-4 text-muted-foreground" />
-                        {activity.capacity}
+                      <div className="space-y-1">
+                        <div className="flex items-center">
+                          <Users className="mr-1 h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">
+                            {activity.current_participants}/{activity.capacity}
+                          </span>
+                        </div>
+                        <Badge
+                          variant={
+                            activity.current_participants >= activity.capacity * 0.8
+                              ? "destructive"
+                              : activity.current_participants >= activity.capacity * 0.5
+                                ? "secondary"
+                                : "outline"
+                          }
+                        >
+                          {Math.round((activity.current_participants / activity.capacity) * 100)}% full
+                        </Badge>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div
-                        className={`font-medium ${getCapacityColor(activity.currentParticipants, activity.capacity)}`}
-                      >
-                        {activity.currentParticipants}/{activity.capacity}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {Math.round((activity.currentParticipants / activity.capacity) * 100)}% full
+                      <div className="flex flex-wrap gap-1">
+                        {activity.weekdays.map((day) => (
+                          <Badge key={day} variant="outline" className="text-xs">
+                            {day.slice(0, 3)}
+                          </Badge>
+                        ))}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={activity.isActive ? "default" : "secondary"}>
-                        {activity.isActive ? "Active" : "Inactive"}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={activity.notification_sent ? "secondary" : "destructive"}>
+                            {activity.notification_sent ? "Sent" : "Pending"}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedActivity(activity)
+                              setNotificationType("all")
+                              setIsNotificationDialogOpen(true)
+                            }}
+                          >
+                            <Send className="h-3 w-3 mr-1" />
+                            All
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedActivity(activity)
+                              setNotificationType("near_full")
+                              setIsNotificationDialogOpen(true)
+                            }}
+                          >
+                            <Bell className="h-3 w-3 mr-1" />
+                            Near Full
+                          </Button>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={activity.is_active ? "default" : "secondary"}>
+                        {activity.is_active ? "Active" : "Inactive"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -450,9 +588,9 @@ export default function ActivitiesPage() {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toggleActivityStatus(activity.id)}>
-                            <Activity className="mr-2 h-4 w-4" />
-                            {activity.isActive ? "Deactivate" : "Activate"}
+                          <DropdownMenuItem>
+                            <Users className="mr-2 h-4 w-4" />
+                            View Responses ({activity.responses.length})
                           </DropdownMenuItem>
                           <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteActivity(activity.id)}>
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -468,6 +606,56 @@ export default function ActivitiesPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Send Notification Dialog */}
+      <Dialog open={isNotificationDialogOpen} onOpenChange={setIsNotificationDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-blue-600" />
+              Send Activity Notification
+            </DialogTitle>
+            <DialogDescription>
+              Send notification for "{selectedActivity?.name}" to{" "}
+              {notificationType === "all" ? "all members" : "members for near-full activities"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">Activity Details:</p>
+              <div className="space-y-1 text-sm">
+                <p>
+                  <strong>Name:</strong> {selectedActivity?.name}
+                </p>
+                <p>
+                  <strong>Time:</strong> {selectedActivity?.timing}
+                </p>
+                <p>
+                  <strong>Days:</strong> {selectedActivity?.weekdays.join(", ")}
+                </p>
+                <p>
+                  <strong>Capacity:</strong> {selectedActivity?.current_participants}/{selectedActivity?.capacity}
+                </p>
+              </div>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <p className="text-sm text-blue-800">
+                {notificationType === "all"
+                  ? "This will send notifications to all gym members about this activity."
+                  : "This will send notifications to members for activities that are nearly full (80%+ capacity)."}
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsNotificationDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendNotification} className="bg-blue-600 hover:bg-blue-700">
+              Send Notification
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

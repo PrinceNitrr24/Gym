@@ -18,6 +18,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Package,
   Plus,
@@ -29,24 +30,17 @@ import {
   Calendar,
   Percent,
   Filter,
+  Clock,
+  Bell,
+  Send,
 } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 
-// Mock data for packages
+// Mock data for packages (limited to 5)
 const mockPackages = [
   {
     id: 1,
-    name: "Basic Monthly",
-    description: "Access to gym equipment and basic facilities",
-    duration: 30,
-    price: 49.99,
-    discountPercentage: 0,
-    subscribers: 85,
-    isActive: true,
-    features: ["Gym Access", "Locker Room", "Basic Equipment"],
-  },
-  {
-    id: 2,
     name: "Premium Monthly",
     description: "Full access including classes and personal training",
     duration: 30,
@@ -54,21 +48,32 @@ const mockPackages = [
     discountPercentage: 10,
     subscribers: 120,
     isActive: true,
+    timing: "10:00 AM - 12:00 PM",
+    weekdays: ["Monday", "Wednesday", "Friday"],
+    notificationSent: true,
+    responses: [
+      { member: "John Doe", status: "interested" },
+      { member: "Sarah Wilson", status: "maybe" },
+    ],
     features: ["All Basic Features", "Group Classes", "1 PT Session", "Nutrition Consultation"],
   },
   {
-    id: 3,
-    name: "Basic Quarterly",
-    description: "3-month basic package with discount",
-    duration: 90,
-    price: 129.99,
-    discountPercentage: 15,
-    subscribers: 45,
+    id: 2,
+    name: "Basic Monthly",
+    description: "Access to gym equipment and basic facilities",
+    duration: 30,
+    price: 49.99,
+    discountPercentage: 0,
+    subscribers: 85,
     isActive: true,
-    features: ["Gym Access", "Locker Room", "Basic Equipment", "Quarterly Assessment"],
+    timing: "08:00 AM - 10:00 AM",
+    weekdays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+    notificationSent: false,
+    responses: [],
+    features: ["Gym Access", "Locker Room", "Basic Equipment"],
   },
   {
-    id: 4,
+    id: 3,
     name: "Premium Annual",
     description: "Full year premium access with maximum benefits",
     duration: 365,
@@ -76,7 +81,26 @@ const mockPackages = [
     discountPercentage: 25,
     subscribers: 78,
     isActive: true,
+    timing: "02:00 PM - 04:00 PM",
+    weekdays: ["Tuesday", "Thursday", "Saturday"],
+    notificationSent: true,
+    responses: [{ member: "Mike Johnson", status: "interested" }],
     features: ["All Premium Features", "Unlimited PT Sessions", "Meal Plans", "Priority Booking"],
+  },
+  {
+    id: 4,
+    name: "Basic Quarterly",
+    description: "3-month basic package with discount",
+    duration: 90,
+    price: 129.99,
+    discountPercentage: 15,
+    subscribers: 45,
+    isActive: true,
+    timing: "04:00 PM - 06:00 PM",
+    weekdays: ["Monday", "Wednesday", "Friday"],
+    notificationSent: false,
+    responses: [],
+    features: ["Gym Access", "Locker Room", "Basic Equipment", "Quarterly Assessment"],
   },
   {
     id: 5,
@@ -87,21 +111,32 @@ const mockPackages = [
     discountPercentage: 40,
     subscribers: 32,
     isActive: false,
+    timing: "06:00 PM - 08:00 PM",
+    weekdays: ["Tuesday", "Thursday"],
+    notificationSent: true,
+    responses: [],
     features: ["Gym Access", "Student ID Required", "Off-peak Hours Only"],
   },
 ]
+
+const weekdayOptions = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 export default function PackagesPage() {
   const [packages, setPackages] = useState(mockPackages)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
+  const [selectedPackage, setSelectedPackage] = useState<any>(null)
+  const [notificationType, setNotificationType] = useState<"all" | "interested">("all")
   const [newPackage, setNewPackage] = useState({
     name: "",
     description: "",
     duration: "",
     price: "",
     discountPercentage: "",
+    timing: "",
+    weekdays: [] as string[],
   })
 
   const filteredPackages = packages.filter((pkg) => {
@@ -126,7 +161,26 @@ export default function PackagesPage() {
     return price - (price * discount) / 100
   }
 
+  const handleWeekdayChange = (weekday: string, checked: boolean) => {
+    if (checked) {
+      setNewPackage({
+        ...newPackage,
+        weekdays: [...newPackage.weekdays, weekday],
+      })
+    } else {
+      setNewPackage({
+        ...newPackage,
+        weekdays: newPackage.weekdays.filter((day) => day !== weekday),
+      })
+    }
+  }
+
   const handleAddPackage = () => {
+    if (packages.length >= 5) {
+      toast.error("Maximum 5 packages allowed!")
+      return
+    }
+
     const pkg = {
       id: packages.length + 1,
       ...newPackage,
@@ -135,6 +189,8 @@ export default function PackagesPage() {
       discountPercentage: Number.parseInt(newPackage.discountPercentage) || 0,
       subscribers: 0,
       isActive: true,
+      notificationSent: false,
+      responses: [],
       features: ["Basic Features"],
     }
     setPackages([...packages, pkg])
@@ -144,12 +200,50 @@ export default function PackagesPage() {
       duration: "",
       price: "",
       discountPercentage: "",
+      timing: "",
+      weekdays: [],
     })
     setIsAddDialogOpen(false)
+    toast.success("Package added successfully!")
   }
 
   const handleDeletePackage = (id: number) => {
     setPackages(packages.filter((pkg) => pkg.id !== id))
+    toast.success("Package deleted successfully!")
+  }
+
+  const handleSendNotification = async () => {
+    if (!selectedPackage) return
+
+    const recipients = notificationType === "all" ? "all members" : `members interested in ${selectedPackage.name}`
+
+    try {
+      const response = await fetch("/api/notifications/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "package_notification",
+          package_id: selectedPackage.id,
+          notification_type: notificationType,
+          title: `${selectedPackage.name} - Package Update`,
+          message: `Check out our ${selectedPackage.name} package available ${selectedPackage.weekdays.join(", ")} at ${selectedPackage.timing}`,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.data) {
+        // Update notification sent status
+        setPackages(packages.map((pkg) => (pkg.id === selectedPackage.id ? { ...pkg, notificationSent: true } : pkg)))
+
+        toast.success(`Notifications sent to ${recipients}! 📧`)
+        setIsNotificationDialogOpen(false)
+        setSelectedPackage(null)
+      }
+    } catch (error) {
+      toast.error("Failed to send notifications")
+    }
   }
 
   const togglePackageStatus = (id: number) => {
@@ -193,21 +287,23 @@ export default function PackagesPage() {
       >
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Packages</h2>
-          <p className="text-muted-foreground">Manage membership packages and pricing</p>
+          <p className="text-muted-foreground">
+            Manage membership packages with timing and notifications (Max 5 packages)
+          </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button className="bg-emerald-600 hover:bg-emerald-700">
+              <Button className="bg-emerald-600 hover:bg-emerald-700" disabled={packages.length >= 5}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Package
+                Add Package {packages.length >= 5 && "(Max Reached)"}
               </Button>
             </motion.div>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Package</DialogTitle>
-              <DialogDescription>Create a new membership package for your gym.</DialogDescription>
+              <DialogDescription>Create a new membership package with timing and weekday schedule.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
@@ -272,12 +368,45 @@ export default function PackagesPage() {
                   className="col-span-3"
                 />
               </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="timing" className="text-right">
+                  Timing
+                </Label>
+                <Input
+                  id="timing"
+                  value={newPackage.timing}
+                  onChange={(e) => setNewPackage({ ...newPackage, timing: e.target.value })}
+                  placeholder="e.g., 10:00 AM - 12:00 PM"
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-start gap-4">
+                <Label className="text-right mt-2">Weekdays</Label>
+                <div className="col-span-3 space-y-2">
+                  {weekdayOptions.map((weekday) => (
+                    <div key={weekday} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={weekday}
+                        checked={newPackage.weekdays.includes(weekday)}
+                        onCheckedChange={(checked) => handleWeekdayChange(weekday, checked as boolean)}
+                      />
+                      <Label htmlFor={weekday} className="text-sm">
+                        {weekday}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddPackage} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button
+                onClick={handleAddPackage}
+                className="bg-emerald-600 hover:bg-emerald-700"
+                disabled={!newPackage.name || !newPackage.timing || newPackage.weekdays.length === 0}
+              >
                 Add Package
               </Button>
             </div>
@@ -285,15 +414,15 @@ export default function PackagesPage() {
         </Dialog>
       </motion.div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Removed total subscribers, min, max, avg as requested */}
       <motion.div
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
         variants={containerVariants}
         initial="hidden"
         animate="visible"
       >
         {[
-          { title: "Total Packages", value: packages.length, icon: Package, color: "text-blue-600" },
+          { title: "Total Packages", value: `${packages.length}/5`, icon: Package, color: "text-blue-600" },
           {
             title: "Active Packages",
             value: packages.filter((p) => p.isActive).length,
@@ -301,16 +430,10 @@ export default function PackagesPage() {
             color: "text-green-600",
           },
           {
-            title: "Total Subscribers",
-            value: packages.reduce((sum, p) => sum + p.subscribers, 0),
-            icon: Package,
+            title: "With Notifications",
+            value: packages.filter((p) => p.notificationSent).length,
+            icon: Bell,
             color: "text-purple-600",
-          },
-          {
-            title: "Avg. Price",
-            value: `$${(packages.reduce((sum, p) => sum + p.price, 0) / packages.length).toFixed(0)}`,
-            icon: DollarSign,
-            color: "text-emerald-600",
           },
         ].map((stat, index) => (
           <motion.div key={stat.title} variants={itemVariants}>
@@ -372,7 +495,9 @@ export default function PackagesPage() {
         <Card>
           <CardHeader>
             <CardTitle>Packages List</CardTitle>
-            <CardDescription>Manage all membership packages and their pricing details.</CardDescription>
+            <CardDescription>
+              Manage all membership packages with automatic notifications and member responses.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -381,8 +506,9 @@ export default function PackagesPage() {
                   <TableHead>Package</TableHead>
                   <TableHead>Duration</TableHead>
                   <TableHead>Price</TableHead>
-                  <TableHead>Discount</TableHead>
-                  <TableHead>Subscribers</TableHead>
+                  <TableHead>Timing</TableHead>
+                  <TableHead>Weekdays</TableHead>
+                  <TableHead>Notifications</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -400,6 +526,7 @@ export default function PackagesPage() {
                       <div>
                         <div className="font-medium">{pkg.name}</div>
                         <div className="text-sm text-muted-foreground">{pkg.description}</div>
+                        <div className="text-xs text-muted-foreground mt-1">{pkg.subscribers} subscribers</div>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -419,6 +546,10 @@ export default function PackagesPage() {
                               </span>
                             </div>
                             <div className="text-xs text-muted-foreground line-through">${pkg.price.toFixed(2)}</div>
+                            <Badge variant="secondary" className="bg-green-100 text-green-800">
+                              <Percent className="mr-1 h-3 w-3" />
+                              {pkg.discountPercentage}% OFF
+                            </Badge>
                           </>
                         ) : (
                           <div className="flex items-center">
@@ -429,18 +560,57 @@ export default function PackagesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {pkg.discountPercentage > 0 ? (
-                        <Badge variant="secondary" className="bg-green-100 text-green-800">
-                          <Percent className="mr-1 h-3 w-3" />
-                          {pkg.discountPercentage}% OFF
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">No discount</span>
-                      )}
+                      <div className="flex items-center text-sm">
+                        <Clock className="mr-1 h-4 w-4 text-muted-foreground" />
+                        {pkg.timing}
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{pkg.subscribers}</div>
-                      <div className="text-xs text-muted-foreground">subscribers</div>
+                      <div className="flex flex-wrap gap-1">
+                        {pkg.weekdays.map((day) => (
+                          <Badge key={day} variant="outline" className="text-xs">
+                            {day.slice(0, 3)}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={pkg.notificationSent ? "secondary" : "destructive"}>
+                            {pkg.notificationSent ? "Sent" : "Pending"}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPackage(pkg)
+                              setNotificationType("all")
+                              setIsNotificationDialogOpen(true)
+                            }}
+                          >
+                            <Send className="h-3 w-3 mr-1" />
+                            All
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPackage(pkg)
+                              setNotificationType("interested")
+                              setIsNotificationDialogOpen(true)
+                            }}
+                          >
+                            <Bell className="h-3 w-3 mr-1" />
+                            Interested
+                          </Button>
+                        </div>
+                        {pkg.responses.length > 0 && (
+                          <div className="text-xs text-muted-foreground">{pkg.responses.length} responses</div>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge variant={pkg.isActive ? "default" : "secondary"}>
@@ -477,6 +647,59 @@ export default function PackagesPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Send Notification Dialog */}
+      <Dialog open={isNotificationDialogOpen} onOpenChange={setIsNotificationDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-blue-600" />
+              Send Package Notification
+            </DialogTitle>
+            <DialogDescription>
+              Send notification for "{selectedPackage?.name}" to{" "}
+              {notificationType === "all" ? "all members" : "interested members"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-muted p-3 rounded-lg">
+              <p className="text-sm font-medium mb-2">Package Details:</p>
+              <div className="space-y-1 text-sm">
+                <p>
+                  <strong>Name:</strong> {selectedPackage?.name}
+                </p>
+                <p>
+                  <strong>Price:</strong> ${selectedPackage?.price}
+                </p>
+                <p>
+                  <strong>Time:</strong> {selectedPackage?.timing}
+                </p>
+                <p>
+                  <strong>Days:</strong> {selectedPackage?.weekdays.join(", ")}
+                </p>
+                <p>
+                  <strong>Subscribers:</strong> {selectedPackage?.subscribers}
+                </p>
+              </div>
+            </div>
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <p className="text-sm text-blue-800">
+                {notificationType === "all"
+                  ? "This will send notifications to all gym members about this package."
+                  : "This will send notifications to members who have shown interest in this package."}
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsNotificationDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendNotification} className="bg-blue-600 hover:bg-blue-700">
+              Send Notification
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

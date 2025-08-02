@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,6 +20,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   UserCheck,
   UserPlus,
@@ -30,90 +33,100 @@ import {
   Calendar,
   Star,
   Filter,
+  Upload,
+  FileText,
+  X,
 } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 
-// Mock data for trainers
+// Mock data for trainers with enhanced fields
 const mockTrainers = [
   {
     id: 1,
     name: "David Smith",
     email: "david.smith@gym.com",
     phone: "+1 234 567 8910",
-    specialization: "Strength Training",
+    specializations: ["Strength Training", "CrossFit"],
     employmentType: "Full-time",
     joinedDate: "2023-06-15",
     rating: 4.8,
     status: "Active",
     avatar: "/placeholder.svg?height=40&width=40",
+    govtIdType: "Aadhar",
+    govtIdNum: "1234-5678-9012",
+    attachments: [
+      { id: 1, name: "Certificate.pdf", size: "2.5 MB", type: "application/pdf" },
+      { id: 2, name: "Resume.pdf", size: "1.2 MB", type: "application/pdf" },
+    ],
   },
   {
     id: 2,
     name: "Maria Rodriguez",
     email: "maria.rodriguez@gym.com",
     phone: "+1 234 567 8911",
-    specialization: "Yoga",
+    specializations: ["Yoga", "Pilates", "Dance"],
     employmentType: "Part-time",
     joinedDate: "2023-08-20",
     rating: 4.9,
     status: "Active",
     avatar: "/placeholder.svg?height=40&width=40",
+    govtIdType: "Driving Licence",
+    govtIdNum: "DL123456789",
+    attachments: [{ id: 3, name: "Yoga_Certification.pdf", size: "3.1 MB", type: "application/pdf" }],
   },
   {
     id: 3,
     name: "James Wilson",
     email: "james.wilson@gym.com",
     phone: "+1 234 567 8912",
-    specialization: "Cardio",
+    specializations: ["Cardio", "HIIT"],
     employmentType: "Full-time",
     joinedDate: "2023-05-10",
     rating: 4.7,
     status: "Active",
     avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 4,
-    name: "Lisa Chen",
-    email: "lisa.chen@gym.com",
-    phone: "+1 234 567 8913",
-    specialization: "Pilates",
-    employmentType: "Freelance",
-    joinedDate: "2023-09-05",
-    rating: 4.6,
-    status: "On Leave",
-    avatar: "/placeholder.svg?height=40&width=40",
-  },
-  {
-    id: 5,
-    name: "Robert Johnson",
-    email: "robert.johnson@gym.com",
-    phone: "+1 234 567 8914",
-    specialization: "CrossFit",
-    employmentType: "Full-time",
-    joinedDate: "2023-07-12",
-    rating: 4.5,
-    status: "Inactive",
-    avatar: "/placeholder.svg?height=40&width=40",
+    govtIdType: "Aadhar",
+    govtIdNum: "9876-5432-1098",
+    attachments: [],
   },
 ]
+
+const availableSpecializations = [
+  "Strength Training",
+  "Cardio",
+  "Yoga",
+  "Pilates",
+  "CrossFit",
+  "Boxing",
+  "Swimming",
+  "Dance",
+  "HIIT",
+  "Martial Arts",
+]
+
+const govtIdTypes = ["Aadhar", "Driving Licence"]
 
 export default function TrainersPage() {
   const [trainers, setTrainers] = useState(mockTrainers)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [newTrainer, setNewTrainer] = useState({
     name: "",
     email: "",
     phone: "",
-    specialization: "",
+    specializations: [] as string[],
     employmentType: "",
+    govtIdType: "",
+    govtIdNum: "",
   })
 
   const filteredTrainers = trainers.filter((trainer) => {
     const matchesSearch =
       trainer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      trainer.specialization.toLowerCase().includes(searchTerm.toLowerCase())
+      trainer.specializations.some((spec) => spec.toLowerCase().includes(searchTerm.toLowerCase()))
     const matchesStatus = statusFilter === "all" || trainer.status.toLowerCase() === statusFilter.toLowerCase()
     return matchesSearch && matchesStatus
   })
@@ -144,6 +157,45 @@ export default function TrainersPage() {
     }
   }
 
+  const handleSpecializationChange = (specialization: string, checked: boolean) => {
+    if (checked) {
+      setNewTrainer({
+        ...newTrainer,
+        specializations: [...newTrainer.specializations, specialization],
+      })
+    } else {
+      setNewTrainer({
+        ...newTrainer,
+        specializations: newTrainer.specializations.filter((spec) => spec !== specialization),
+      })
+    }
+  }
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    const totalFiles = selectedFiles.length + files.length
+
+    if (totalFiles > 5) {
+      toast.error("Maximum 5 files allowed!")
+      return
+    }
+
+    const validFiles = files.filter((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        // 10MB limit
+        toast.error(`File ${file.name} is too large. Maximum 10MB allowed.`)
+        return false
+      }
+      return true
+    })
+
+    setSelectedFiles([...selectedFiles, ...validFiles])
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== index))
+  }
+
   const handleAddTrainer = () => {
     const trainer = {
       id: trainers.length + 1,
@@ -152,20 +204,31 @@ export default function TrainersPage() {
       rating: 0,
       status: "Active",
       avatar: "/placeholder.svg?height=40&width=40",
+      attachments: selectedFiles.map((file, index) => ({
+        id: Date.now() + index,
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        type: file.type,
+      })),
     }
     setTrainers([...trainers, trainer])
     setNewTrainer({
       name: "",
       email: "",
       phone: "",
-      specialization: "",
+      specializations: [],
       employmentType: "",
+      govtIdType: "",
+      govtIdNum: "",
     })
+    setSelectedFiles([])
     setIsAddDialogOpen(false)
+    toast.success("Trainer added successfully!")
   }
 
   const handleDeleteTrainer = (id: number) => {
     setTrainers(trainers.filter((trainer) => trainer.id !== id))
+    toast.success("Trainer deleted successfully!")
   }
 
   const containerVariants = {
@@ -205,7 +268,7 @@ export default function TrainersPage() {
       >
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Trainers</h2>
-          <p className="text-muted-foreground">Manage your gym trainers and their specializations</p>
+          <p className="text-muted-foreground">Manage your gym trainers with attachments and specializations</p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
@@ -216,15 +279,15 @@ export default function TrainersPage() {
               </Button>
             </motion.div>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Add New Trainer</DialogTitle>
-              <DialogDescription>Add a new trainer to your gym. Fill in their details below.</DialogDescription>
+              <DialogDescription>Add a new trainer with attachments and government ID details.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="name" className="text-right">
-                  Name
+                  Name *
                 </Label>
                 <Input
                   id="name"
@@ -235,7 +298,7 @@ export default function TrainersPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="email" className="text-right">
-                  Email
+                  Email *
                 </Label>
                 <Input
                   id="email"
@@ -247,7 +310,7 @@ export default function TrainersPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="phone" className="text-right">
-                  Phone
+                  Phone *
                 </Label>
                 <Input
                   id="phone"
@@ -257,27 +320,54 @@ export default function TrainersPage() {
                 />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="specialization" className="text-right">
-                  Specialization
+                <Label htmlFor="govtIdType" className="text-right">
+                  Govt ID Type *
                 </Label>
-                <Select onValueChange={(value) => setNewTrainer({ ...newTrainer, specialization: value })}>
+                <Select onValueChange={(value) => setNewTrainer({ ...newTrainer, govtIdType: value })}>
                   <SelectTrigger className="col-span-3">
-                    <SelectValue placeholder="Select specialization" />
+                    <SelectValue placeholder="Select ID type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Strength Training">Strength Training</SelectItem>
-                    <SelectItem value="Cardio">Cardio</SelectItem>
-                    <SelectItem value="Yoga">Yoga</SelectItem>
-                    <SelectItem value="Pilates">Pilates</SelectItem>
-                    <SelectItem value="CrossFit">CrossFit</SelectItem>
-                    <SelectItem value="Boxing">Boxing</SelectItem>
-                    <SelectItem value="Swimming">Swimming</SelectItem>
+                    {govtIdTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="govtIdNum" className="text-right">
+                  Govt ID Number *
+                </Label>
+                <Input
+                  id="govtIdNum"
+                  value={newTrainer.govtIdNum}
+                  onChange={(e) => setNewTrainer({ ...newTrainer, govtIdNum: e.target.value })}
+                  placeholder="Enter alphanumeric ID"
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-start gap-4">
+                <Label className="text-right mt-2">Specializations *</Label>
+                <div className="col-span-3 space-y-2 max-h-40 overflow-y-auto">
+                  {availableSpecializations.map((specialization) => (
+                    <div key={specialization} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={specialization}
+                        checked={newTrainer.specializations.includes(specialization)}
+                        onCheckedChange={(checked) => handleSpecializationChange(specialization, checked as boolean)}
+                      />
+                      <Label htmlFor={specialization} className="text-sm">
+                        {specialization}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="employment" className="text-right">
-                  Employment
+                  Employment *
                 </Label>
                 <Select onValueChange={(value) => setNewTrainer({ ...newTrainer, employmentType: value })}>
                   <SelectTrigger className="col-span-3">
@@ -290,12 +380,64 @@ export default function TrainersPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="grid grid-cols-4 items-start gap-4">
+                <Label className="text-right mt-2">Attachments</Label>
+                <div className="col-span-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <Label htmlFor="file-upload" className="cursor-pointer">
+                      <Button type="button" variant="outline" className="w-full bg-transparent">
+                        <Upload className="mr-2 h-4 w-4" />
+                        Upload Files (Max 5, 10MB each)
+                      </Button>
+                    </Label>
+                  </div>
+                  <div className="text-xs text-muted-foreground">Accepted formats: PDF, DOC, DOCX, JPG, JPEG, PNG</div>
+                  {selectedFiles.length > 0 && (
+                    <div className="space-y-2 max-h-32 overflow-y-auto">
+                      {selectedFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between bg-muted p-2 rounded">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4" />
+                            <span className="text-sm">{file.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({(file.size / (1024 * 1024)).toFixed(1)} MB)
+                            </span>
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeFile(index)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleAddTrainer} className="bg-emerald-600 hover:bg-emerald-700">
+              <Button
+                onClick={handleAddTrainer}
+                className="bg-emerald-600 hover:bg-emerald-700"
+                disabled={
+                  !newTrainer.name ||
+                  !newTrainer.email ||
+                  !newTrainer.phone ||
+                  !newTrainer.govtIdType ||
+                  !newTrainer.govtIdNum ||
+                  newTrainer.specializations.length === 0 ||
+                  !newTrainer.employmentType
+                }
+              >
                 Add Trainer
               </Button>
             </div>
@@ -320,10 +462,10 @@ export default function TrainersPage() {
           },
           { title: "Average Rating", value: "4.7", icon: Star, color: "text-yellow-600" },
           {
-            title: "On Leave",
-            value: trainers.filter((t) => t.status === "On Leave").length,
-            icon: UserCheck,
-            color: "text-orange-600",
+            title: "With Attachments",
+            value: trainers.filter((t) => t.attachments.length > 0).length,
+            icon: FileText,
+            color: "text-purple-600",
           },
         ].map((stat, index) => (
           <motion.div key={stat.title} variants={itemVariants}>
@@ -387,7 +529,7 @@ export default function TrainersPage() {
           <CardHeader>
             <CardTitle>Trainers List</CardTitle>
             <CardDescription>
-              A list of all trainers in your gym with their specializations and details.
+              Complete trainer information with government ID, attachments, and specializations.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -396,8 +538,10 @@ export default function TrainersPage() {
                 <TableRow>
                   <TableHead>Trainer</TableHead>
                   <TableHead>Contact</TableHead>
-                  <TableHead>Specialization</TableHead>
+                  <TableHead>Government ID</TableHead>
+                  <TableHead>Specializations</TableHead>
                   <TableHead>Employment</TableHead>
+                  <TableHead>Attachments</TableHead>
                   <TableHead>Rating</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -445,10 +589,33 @@ export default function TrainersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{trainer.specialization}</Badge>
+                      <div className="space-y-1">
+                        <Badge variant="outline">{trainer.govtIdType}</Badge>
+                        <div className="text-sm text-muted-foreground">{trainer.govtIdNum}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {trainer.specializations.map((spec) => (
+                          <Badge key={spec} variant="outline" className="text-xs">
+                            {spec}
+                          </Badge>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={getEmploymentColor(trainer.employmentType)}>{trainer.employmentType}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{trainer.attachments.length} files</span>
+                        {trainer.attachments.length > 0 && (
+                          <Button variant="ghost" size="sm">
+                            View
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center">
@@ -470,6 +637,10 @@ export default function TrainersPage() {
                           <DropdownMenuItem>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Upload className="mr-2 h-4 w-4" />
+                            Update Attachments
                           </DropdownMenuItem>
                           <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteTrainer(trainer.id)}>
                             <Trash2 className="mr-2 h-4 w-4" />

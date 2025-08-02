@@ -16,11 +16,29 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Users, UserPlus, Search, MoreHorizontal, Edit, Trash2, Phone, Mail, Calendar, Filter } from "lucide-react"
+import {
+  Users,
+  UserPlus,
+  Search,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Phone,
+  Mail,
+  Calendar,
+  Filter,
+  Star,
+  Bell,
+  Plus,
+  DollarSign,
+} from "lucide-react"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
 import { MemberQuickActions } from "@/components/member-quick-actions"
 import { SmartMemberForm } from "@/components/smart-member-form"
+import { Badge } from "@/components/ui/badge"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 interface Member {
   id: string
@@ -33,9 +51,15 @@ interface Member {
   emergency_contact: string
   status: string
   package_name?: string
+  package_end_date?: string
   created_at: string
   cancellation_reason?: string
   cancellation_date?: string
+  rating?: number
+  balance?: number
+  personal_trainer?: boolean
+  govt_id_type?: string
+  govt_id_num?: string
 }
 
 export default function MembersPage() {
@@ -45,6 +69,16 @@ export default function MembersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false)
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<Member | null>(null)
+  const [notificationMessage, setNotificationMessage] = useState("")
+  const [paymentData, setPaymentData] = useState({
+    amount: "",
+    method: "",
+    type: "subscription", // subscription or refund
+    description: "",
+  })
 
   useEffect(() => {
     fetchMembers()
@@ -91,7 +125,7 @@ export default function MembersPage() {
         setMembers([result.data, ...members])
         setIsAddDialogOpen(false)
         toast.success(`Welcome ${memberData.full_name}! 🎉`, {
-          description: "Member has been successfully added to your gym.",
+          description: "Member has been successfully added to your gym. Login credentials sent via SMS/Email.",
         })
       } else {
         toast.error("Failed to add member")
@@ -123,6 +157,85 @@ export default function MembersPage() {
     } catch (error) {
       console.error("Error deleting member:", error)
       toast.error("Failed to delete member")
+    }
+  }
+
+  const handleSendNotification = async () => {
+    if (!selectedMember) return
+
+    try {
+      const response = await fetch("/api/notifications/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "custom",
+          recipients: [selectedMember.full_name],
+          title: "Important Update",
+          message: notificationMessage,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.data) {
+        toast.success("Notification sent successfully! 📧")
+        setIsNotificationDialogOpen(false)
+        setNotificationMessage("")
+        setSelectedMember(null)
+      }
+    } catch (error) {
+      toast.error("Failed to send notification")
+    }
+  }
+
+  const handleLogPayment = async () => {
+    if (!selectedMember) return
+
+    try {
+      const response = await fetch("/api/payments/manual", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          memberId: selectedMember.id,
+          memberName: selectedMember.full_name,
+          amount: Number.parseFloat(paymentData.amount),
+          method: paymentData.method,
+          type: paymentData.type,
+          description: paymentData.description,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.data) {
+        toast.success(`Payment ${paymentData.type === "refund" ? "refund" : "received"} logged successfully! 💰`)
+        setIsPaymentDialogOpen(false)
+        setPaymentData({ amount: "", method: "", type: "subscription", description: "" })
+        setSelectedMember(null)
+      }
+    } catch (error) {
+      toast.error("Failed to log payment")
+    }
+  }
+
+  const handleRatingUpdate = async (memberId: string, rating: number) => {
+    try {
+      const response = await fetch(`/api/members/${memberId}/rating`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rating }),
+      })
+
+      if (response.ok) {
+        setMembers(members.map((member) => (member.id === memberId ? { ...member, rating } : member)))
+        toast.success("Member rating updated!")
+      }
+    } catch (error) {
+      toast.error("Failed to update rating")
     }
   }
 
@@ -198,7 +311,8 @@ export default function MembersPage() {
             <DialogHeader>
               <DialogTitle>Add New Member</DialogTitle>
               <DialogDescription>
-                Create a new member profile with smart auto-fill features to save time.
+                Create a new member profile with enhanced features including govt ID, balance tracking, and personal
+                trainer options.
               </DialogDescription>
             </DialogHeader>
             <SmartMemberForm onSubmit={handleAddMember} loading={addLoading} />
@@ -206,7 +320,7 @@ export default function MembersPage() {
         </Dialog>
       </motion.div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - All Clickable */}
       <motion.div
         className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
         variants={containerVariants}
@@ -214,28 +328,40 @@ export default function MembersPage() {
         animate="visible"
       >
         {[
-          { title: "Total Members", value: members.length, icon: Users, color: "text-blue-600" },
+          {
+            title: "Total Members",
+            value: members.length,
+            icon: Users,
+            color: "text-blue-600",
+            filter: "all",
+          },
           {
             title: "Active Members",
             value: members.filter((m) => m.status === "Active").length,
             icon: Users,
             color: "text-green-600",
+            filter: "active",
           },
           {
             title: "Cancelled",
             value: members.filter((m) => m.status === "Cancelled").length,
             icon: Users,
             color: "text-red-600",
+            filter: "cancelled",
           },
           {
-            title: "Expired",
-            value: members.filter((m) => m.status === "Expired").length,
+            title: "Dormant",
+            value: members.filter((m) => m.status === "Dormant").length,
             icon: Users,
             color: "text-orange-600",
+            filter: "dormant",
           },
         ].map((stat, index) => (
           <motion.div key={stat.title} variants={itemVariants}>
-            <Card>
+            <Card
+              className="cursor-pointer hover:shadow-lg transition-all duration-300 hover:scale-105"
+              onClick={() => setStatusFilter(stat.filter)}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
                 <stat.icon className={`h-4 w-4 ${stat.color}`} />
@@ -280,7 +406,7 @@ export default function MembersPage() {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="cancelled">Cancelled</SelectItem>
-            <SelectItem value="expired">Expired</SelectItem>
+            <SelectItem value="dormant">Dormant</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
@@ -295,7 +421,9 @@ export default function MembersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Members List</CardTitle>
-            <CardDescription>Manage all members with quick actions for membership changes.</CardDescription>
+            <CardDescription>
+              Manage all members with enhanced features including ratings, notifications, and payment logging.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -304,6 +432,9 @@ export default function MembersPage() {
                   <TableHead>Member</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Join Date</TableHead>
+                  <TableHead>Package End Date</TableHead>
+                  <TableHead>Rating</TableHead>
+                  <TableHead>Balance</TableHead>
                   <TableHead>Status & Actions</TableHead>
                   <TableHead className="text-right">More</TableHead>
                 </TableRow>
@@ -330,7 +461,14 @@ export default function MembersPage() {
                         </Avatar>
                         <div>
                           <div className="font-medium">{member.full_name}</div>
-                          <div className="text-sm text-muted-foreground">{member.gender}</div>
+                          <div className="text-sm text-muted-foreground flex items-center gap-2">
+                            {member.gender}
+                            {member.personal_trainer && (
+                              <Badge variant="outline" className="text-xs">
+                                PT
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -353,6 +491,40 @@ export default function MembersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
+                      {member.package_end_date ? (
+                        <div className="flex items-center text-sm">
+                          <Calendar className="mr-1 h-3 w-3" />
+                          {new Date(member.package_end_date).toLocaleDateString()}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Not set</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`h-4 w-4 cursor-pointer ${
+                              star <= (member.rating || 0) ? "fill-yellow-400 text-yellow-400" : "text-gray-300"
+                            }`}
+                            onClick={() => handleRatingUpdate(member.id, star)}
+                          />
+                        ))}
+                        <span className="text-sm text-muted-foreground ml-1">{member.rating || 0}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {member.balance ? (
+                        <div className="flex items-center text-sm">
+                          <DollarSign className="mr-1 h-3 w-3" />
+                          {member.balance}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">$0</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <MemberQuickActions member={member} onMemberUpdate={handleMemberUpdate} />
                     </TableCell>
                     <TableCell className="text-right">
@@ -366,6 +538,24 @@ export default function MembersPage() {
                           <DropdownMenuItem>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedMember(member)
+                              setIsNotificationDialogOpen(true)
+                            }}
+                          >
+                            <Bell className="mr-2 h-4 w-4" />
+                            Send Notification
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSelectedMember(member)
+                              setIsPaymentDialogOpen(true)
+                            }}
+                          >
+                            <Plus className="mr-2 h-4 w-4" />
+                            Log Payment
                           </DropdownMenuItem>
                           <DropdownMenuItem>
                             <Calendar className="mr-2 h-4 w-4" />
@@ -385,6 +575,106 @@ export default function MembersPage() {
           </CardContent>
         </Card>
       </motion.div>
+
+      {/* Send Notification Dialog */}
+      <Dialog open={isNotificationDialogOpen} onOpenChange={setIsNotificationDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Send Notification</DialogTitle>
+            <DialogDescription>Send a custom notification to {selectedMember?.full_name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="notification-message">Message</Label>
+              <Textarea
+                id="notification-message"
+                placeholder="Enter your message here..."
+                value={notificationMessage}
+                onChange={(e) => setNotificationMessage(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsNotificationDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSendNotification} disabled={!notificationMessage.trim()}>
+              Send Notification
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Payment Dialog */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Log Payment</DialogTitle>
+            <DialogDescription>Record a payment transaction for {selectedMember?.full_name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="payment-amount">Amount</Label>
+              <Input
+                id="payment-amount"
+                type="number"
+                step="0.01"
+                placeholder="0.00"
+                value={paymentData.amount}
+                onChange={(e) => setPaymentData({ ...paymentData, amount: e.target.value })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="payment-method">Payment Method</Label>
+              <Select onValueChange={(value) => setPaymentData({ ...paymentData, method: value })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select payment method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="card">Credit/Debit Card</SelectItem>
+                  <SelectItem value="upi">UPI</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="payment-type">Payment Type</Label>
+              <Select
+                value={paymentData.type}
+                onValueChange={(value) => setPaymentData({ ...paymentData, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="subscription">Received (Subscription)</SelectItem>
+                  <SelectItem value="refund">Given (Refund)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="payment-description">Description</Label>
+              <Textarea
+                id="payment-description"
+                placeholder="Payment description..."
+                value={paymentData.description}
+                onChange={(e) => setPaymentData({ ...paymentData, description: e.target.value })}
+                rows={2}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleLogPayment} disabled={!paymentData.amount || !paymentData.method}>
+              Log Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   )
 }

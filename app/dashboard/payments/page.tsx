@@ -9,6 +9,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import {
   CreditCard,
   Search,
   MoreHorizontal,
@@ -20,8 +29,10 @@ import {
   CheckCircle,
   Filter,
   Receipt,
+  Plus,
 } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "sonner"
 
 // Mock data for payments
 const mockPayments = [
@@ -92,6 +103,18 @@ export default function PaymentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [paymentModeFilter, setPaymentModeFilter] = useState("all")
+  const [isAddPaymentDialogOpen, setIsAddPaymentDialogOpen] = useState(false)
+  const [addingPayment, setAddingPayment] = useState(false)
+  const [newPayment, setNewPayment] = useState({
+    memberName: "",
+    memberEmail: "",
+    packageName: "",
+    amount: "",
+    paymentMode: "",
+    paymentStatus: "Paid",
+    transactionDate: new Date().toISOString().split("T")[0],
+    dueDate: new Date().toISOString().split("T")[0],
+  })
 
   const filteredPayments = payments.filter((payment) => {
     const matchesSearch =
@@ -138,6 +161,49 @@ export default function PaymentsPage() {
       .reduce((sum, p) => sum + p.amount, 0)
   }
 
+  const handleAddPayment = async () => {
+    setAddingPayment(true)
+    try {
+      const response = await fetch("/api/payments/manual", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...newPayment,
+          amount: Number.parseFloat(newPayment.amount),
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.data) {
+        setPayments([result.data, ...payments])
+        setNewPayment({
+          memberName: "",
+          memberEmail: "",
+          packageName: "",
+          amount: "",
+          paymentMode: "",
+          paymentStatus: "Paid",
+          transactionDate: new Date().toISOString().split("T")[0],
+          dueDate: new Date().toISOString().split("T")[0],
+        })
+        setIsAddPaymentDialogOpen(false)
+        toast.success("Payment record added successfully! 💰", {
+          description: `Payment of $${newPayment.amount} has been recorded.`,
+        })
+      } else {
+        toast.error("Failed to add payment record")
+      }
+    } catch (error) {
+      console.error("Error adding payment:", error)
+      toast.error("Failed to add payment record")
+    } finally {
+      setAddingPayment(false)
+    }
+  }
+
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -177,12 +243,167 @@ export default function PaymentsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Payments</h2>
           <p className="text-muted-foreground">Track payments, invoices, and revenue</p>
         </div>
-        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button className="bg-emerald-600 hover:bg-emerald-700">
-            <Receipt className="mr-2 h-4 w-4" />
-            Generate Invoice
-          </Button>
-        </motion.div>
+        <div className="flex gap-2">
+          <Dialog open={isAddPaymentDialogOpen} onOpenChange={setIsAddPaymentDialogOpen}>
+            <DialogTrigger asChild>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button variant="outline" className="text-green-600 hover:text-green-700 bg-transparent">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Payment
+                </Button>
+              </motion.div>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Add Payment History Manually</DialogTitle>
+                <DialogDescription>Record a payment transaction manually for tracking purposes.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="memberName" className="text-right">
+                    Member Name
+                  </Label>
+                  <Input
+                    id="memberName"
+                    value={newPayment.memberName}
+                    onChange={(e) => setNewPayment({ ...newPayment, memberName: e.target.value })}
+                    className="col-span-3"
+                    placeholder="Enter member name"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="memberEmail" className="text-right">
+                    Member Email
+                  </Label>
+                  <Input
+                    id="memberEmail"
+                    type="email"
+                    value={newPayment.memberEmail}
+                    onChange={(e) => setNewPayment({ ...newPayment, memberEmail: e.target.value })}
+                    className="col-span-3"
+                    placeholder="Enter member email"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="packageName" className="text-right">
+                    Package
+                  </Label>
+                  <Select onValueChange={(value) => setNewPayment({ ...newPayment, packageName: value })}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select package" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Basic Monthly">Basic Monthly</SelectItem>
+                      <SelectItem value="Premium Monthly">Premium Monthly</SelectItem>
+                      <SelectItem value="Basic Quarterly">Basic Quarterly</SelectItem>
+                      <SelectItem value="Premium Annual">Premium Annual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="amount" className="text-right">
+                    Amount
+                  </Label>
+                  <div className="relative col-span-3">
+                    <DollarSign className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="0.01"
+                      value={newPayment.amount}
+                      onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
+                      className="pl-8"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="paymentMode" className="text-right">
+                    Payment Mode
+                  </Label>
+                  <Select onValueChange={(value) => setNewPayment({ ...newPayment, paymentMode: value })}>
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue placeholder="Select payment mode" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Credit Card">Credit Card</SelectItem>
+                      <SelectItem value="Debit Card">Debit Card</SelectItem>
+                      <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Cash">Cash</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="paymentStatus" className="text-right">
+                    Status
+                  </Label>
+                  <Select
+                    value={newPayment.paymentStatus}
+                    onValueChange={(value) => setNewPayment({ ...newPayment, paymentStatus: value })}
+                  >
+                    <SelectTrigger className="col-span-3">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Overdue">Overdue</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="transactionDate" className="text-right">
+                    Transaction Date
+                  </Label>
+                  <Input
+                    id="transactionDate"
+                    type="date"
+                    value={newPayment.transactionDate}
+                    onChange={(e) => setNewPayment({ ...newPayment, transactionDate: e.target.value })}
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="dueDate" className="text-right">
+                    Due Date
+                  </Label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={newPayment.dueDate}
+                    onChange={(e) => setNewPayment({ ...newPayment, dueDate: e.target.value })}
+                    className="col-span-3"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsAddPaymentDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAddPayment}
+                  disabled={
+                    addingPayment ||
+                    !newPayment.memberName ||
+                    !newPayment.amount ||
+                    !newPayment.packageName ||
+                    !newPayment.paymentMode
+                  }
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {addingPayment ? "Adding..." : "Add Payment"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700">
+              <Receipt className="mr-2 h-4 w-4" />
+              Generate Invoice
+            </Button>
+          </motion.div>
+        </div>
       </motion.div>
 
       {/* Stats Cards */}
